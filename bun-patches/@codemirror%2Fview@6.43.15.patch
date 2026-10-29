@@ -12,7 +12,6 @@ bumping @codemirror/view before then, carry it over and rerun
 packages/ui/src/components/chat/composer/editor/__tests__/iosNativeParagraph.test.ts.
 
 diff --git a/dist/index.cjs b/dist/index.cjs
-diff --git a/dist/index.cjs b/dist/index.cjs
 index a75cdaf6caef51a98adee80a57536a9ca12a1e85..fe6d15a787d1a095d9671564376aab5d99df3bcf 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
