@@ -4,14 +4,16 @@ An iOS keyboard cleaning up dictation inserts a paragraph DIV and keeps writing
 into it. CodeMirror reads the paragraph at once and replaces the DIV with its
 own line, so the keyboard's later text lands in a detached node and is lost.
 The patch reads such a paragraph one frame later, with the rest of its batch,
-and keeps the pending change when the editor updates within that frame.
+and keeps the pending change when the editor updates, takes focus or reads
+its layout within that frame.
 
 Remove this patch once a @codemirror/view release fixes it upstream. When
 bumping @codemirror/view before then, carry it over and rerun
 packages/ui/src/components/chat/composer/editor/__tests__/iosNativeParagraph.test.ts.
 
 diff --git a/dist/index.cjs b/dist/index.cjs
-index a75cdaf6caef51a98adee80a57536a9ca12a1e85..ab1ee5fd43562ea43adb657e3c24396ec9ac7485 100644
+diff --git a/dist/index.cjs b/dist/index.cjs
+index a75cdaf6caef51a98adee80a57536a9ca12a1e85..fe6d15a787d1a095d9671564376aab5d99df3bcf 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -7182,6 +7182,7 @@ class DOMObserver {
@@ -79,8 +81,18 @@ index a75cdaf6caef51a98adee80a57536a9ca12a1e85..ab1ee5fd43562ea43adb657e3c24396e
                          dispatchKey(this.contentDOM, pendingKey.key, pendingKey.keyCode);
                  }
              });
+@@ -8216,7 +8235,8 @@ class EditorView {
+             return;
+         }
+         this.measureScheduled = 0; // Prevent requestMeasure calls from scheduling another animation frame
+-        if (flush)
++        // OpenChamber patch: a layout read must not drop a deferred iOS paragraph.
++        if (flush || this.observer.iosParagraphPending)
+             this.observer.forceFlush();
+         let updated = null;
+         let scroll = this.viewState.scrollParent, scrollOffset = this.viewState.getScrollOffset();
 diff --git a/dist/index.js b/dist/index.js
-index bda68ef32c8741c3c3f85bcf877953496ccf6e20..b4975453bf693a9cbc8ad873dffb18e6bf627e5f 100644
+index bda68ef32c8741c3c3f85bcf877953496ccf6e20..8608ea66d9c8dbf5d84c3ac73e2197830f08a2a8 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -7177,6 +7177,7 @@ class DOMObserver {
@@ -148,3 +160,13 @@ index bda68ef32c8741c3c3f85bcf877953496ccf6e20..b4975453bf693a9cbc8ad873dffb18e6
                          dispatchKey(this.contentDOM, pendingKey.key, pendingKey.keyCode);
                  }
              });
+@@ -8211,7 +8230,8 @@ class EditorView {
+             return;
+         }
+         this.measureScheduled = 0; // Prevent requestMeasure calls from scheduling another animation frame
+-        if (flush)
++        // OpenChamber patch: a layout read must not drop a deferred iOS paragraph.
++        if (flush || this.observer.iosParagraphPending)
+             this.observer.forceFlush();
+         let updated = null;
+         let scroll = this.viewState.scrollParent, scrollOffset = this.viewState.getScrollOffset();

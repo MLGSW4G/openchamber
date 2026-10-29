@@ -138,4 +138,15 @@ describe('iOS keyboard native paragraphs (#5746)', () => {
 
         expect(view.state.doc.toString()).toBe('cleaned first\nsecond');
     });
+
+    test('keeps a pending paragraph when the layout is read before the frame', () => {
+        const second = nativeParagraph(view.contentDOM);
+        nativeText(second, 'second');
+        view.requestMeasure();
+        view.coordsAtPos(0);
+        runFrame();
+        deliverMutations();
+
+        expect(view.state.doc.toString()).toBe('cleaned first\nsecond');
+    });
 });

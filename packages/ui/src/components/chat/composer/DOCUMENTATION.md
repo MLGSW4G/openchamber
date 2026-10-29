@@ -496,8 +496,9 @@ keyboard writes after the first paragraph break lands in a detached node and
 never reaches the draft. A temporary Bun patch
 (`bun-patches/@codemirror%2Fview@6.43.15.patch`) reads such a paragraph one
 frame later, with the rest of its batch, and reads it early instead of dropping
-it when the editor updates or is focused within that frame. It applies to every
-CodeMirror view on iOS, not only the composer. When bumping `@codemirror/view`,
+it when the editor updates, takes focus or reads its layout within that
+frame. It applies to every CodeMirror view on iOS, not only the composer. When
+bumping `@codemirror/view`,
 carry the patch over and rerun `editor/__tests__/iosNativeParagraph.test.ts`;
 remove it once a CodeMirror release fixes this.
 
