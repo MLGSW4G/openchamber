@@ -22,7 +22,8 @@ import {
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { ActionToolbar, ToolbarTooltipButton, type ToolbarAction, type ToolbarGroup } from '@/components/ui/action-toolbar';
+import { ActionToolbar, ToolbarTooltipButton, TooltipLabelWithShortcut, type ToolbarAction, type ToolbarGroup } from '@/components/ui/action-toolbar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { CodeMirrorEditor } from '@/components/ui/CodeMirrorEditor';
 import { GoToLineDialog } from './GoToLineDialog';
 import { FilePathLabel } from './files/FilePathLabel';
@@ -1058,6 +1059,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   const [canvasSaved, setCanvasSaved] = React.useState(false);
   const [contentDetectedBinary, setContentDetectedBinary] = React.useState(false);
   const autoSaveEnabled = useUIStore((state) => state.autoSaveEnabled);
+  const shortcutOverrides = useUIStore((state) => state.shortcutOverrides);
   const setAutoSaveEnabled = useUIStore((state) => state.setAutoSaveEnabled);
 
   const [confirmDiscardOpen, setConfirmDiscardOpen] = React.useState(false);
@@ -4272,6 +4274,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       id: 'search',
       label: t('filesView.editor.findInFile'),
       icon: 'search',
+      shortcut: formatShortcutForDisplay(getEffectiveShortcutCombo('find_in_file', shortcutOverrides), ''),
       pressed: searchOpen,
       onSelect: () => {
         // The Markdown preview has its own find bar; every other mode searches the source.
@@ -4293,6 +4296,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       id: 'go-to-line',
       label: t('filesView.editor.goToLine'),
       icon: 'hashtag',
+      shortcut: formatShortcutForDisplay(getEffectiveShortcutCombo('open_go_to_line', shortcutOverrides), ''),
       pressed: isGoToLineOpen,
       onSelect: () => {
         openSourceEditor();
@@ -4305,6 +4309,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
       id: 'symbols',
       label: t('filesView.editor.symbols'),
       icon: 'braces',
+      shortcut: formatShortcutForDisplay(getEffectiveShortcutCombo('open_document_symbols', shortcutOverrides), ''),
       pressed: isSymbolsOpen,
       onSelect: () => {
         openSourceEditor();
@@ -4330,14 +4335,16 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
     } : null;
 
     const copyPathLabel = t('filesView.editor.copyFilePathTitle', { path: displaySelectedPath });
+    const showsPathLabel = docked && Boolean(displaySelectedPath) && !isMobile;
+    const pathLabelCopies = showsPathLabel && canCopyPath;
+    const commentAction: ToolbarAction = {
+      id: 'comment-on-file',
+      label: t('inlineComment.actions.commentOnFile'),
+      icon: 'chat-1',
+      pressed: wholeFileComment.isOpen,
+      onSelect: wholeFileComment.toggle,
+    };
     const fileActions: ToolbarGroup = [
-      {
-        id: 'comment-on-file',
-        label: t('inlineComment.actions.commentOnFile'),
-        icon: 'chat-1',
-        pressed: wholeFileComment.isOpen,
-        onSelect: wholeFileComment.toggle,
-      },
       // Every item hands the path to this machine's OS. A remote server, WSL
       // included, keeps its files elsewhere, so the menu would only fail there.
       isDesktopLocalOriginActive() && {
@@ -4354,7 +4361,8 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
         onSelect: () => void copyContents(false),
         onMenuSelect: () => void copyContents(true),
       },
-      canCopyPath && {
+      // Where the toolbar names the file, a click on the name copies its path.
+      canCopyPath && !pathLabelCopies && {
         id: 'copy-path',
         label: copyPathLabel,
         icon: 'link',
@@ -4422,8 +4430,38 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
         start={docked ? (
           // Mobile hosts already show the file name in their own header;
           // a truncated duplicate here just eats toolbar width.
-          displaySelectedPath && !isMobile ? (
-            <FilePathLabel path={displaySelectedPath} className="typography-meta text-muted-foreground" />
+          showsPathLabel ? (
+            pathLabelCopies ? (
+              // The name copies the path: it brightens under the pointer and
+              // a copy mark appears after it; a check answers the click.
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => void copyPath(false)}
+                    aria-label={copyPathLabel}
+                    className="group/path flex min-w-0 flex-1 items-center text-start typography-meta text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
+                  >
+                    <FilePathLabel
+                      path={displaySelectedPath}
+                      title={null}
+                      trailing={(
+                        <Icon
+                          name={copiedPath ? 'check' : 'file-copy'}
+                          className={cn(
+                            'size-3 shrink-0 transition-opacity',
+                            copiedPath ? 'text-[color:var(--status-success)] opacity-100' : 'opacity-0 group-hover/path:opacity-100 group-focus-visible/path:opacity-100',
+                          )}
+                        />
+                      )}
+                    />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={6}><TooltipLabelWithShortcut label={copyPathLabel} /></TooltipContent>
+              </Tooltip>
+            ) : (
+              <FilePathLabel path={displaySelectedPath} className="typography-meta text-muted-foreground" />
+            )
           ) : null
         ) : undefined}
         status={status}
@@ -4437,12 +4475,15 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
             variant="inline"
           />
         ) : null}
+        // The row keeps what a file is read and worked with: its view mode,
+        // find and a comment on it. Editor aids, the file's own actions and
+        // document settings wait in "More actions", so the row stays a few
+        // buttons whatever the file is.
         groups={[
           [modeAction, annotateAction],
-          [searchAction, goToLineAction, symbolsAction, wrapAction, readAloudAction],
-          fileActions,
+          [searchAction, commentAction],
         ]}
-        menuOnly={[autoSaveAction]}
+        menuOnly={[goToLineAction, symbolsAction, wrapAction, readAloudAction, ...fileActions, autoSaveAction]}
         trailing={[fullscreenAction]}
         fold={docked}
         onMenuOpenChange={handleToolbarDropdownOpenChange}
@@ -4528,7 +4569,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   // Above the scroller, so an editor opened far down the file is on screen.
   // The fullscreen overlay shows it instead while it is open: one editor at a time.
   const wholeFileCommentPanel = wholeFileComment.editor || wholeFileComment.cards ? (
-    <div className="max-h-[50%] shrink-0 overflow-y-auto border-b border-border/40">
+    <div className="max-h-[50%] shrink-0 overflow-y-auto border-b border-edge-muted">
       {wholeFileComment.editor}
       {wholeFileComment.cards}
     </div>
@@ -4564,7 +4605,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div className={cn('flex flex-col flex-shrink-0', showEditorTabsRow && 'border-b border-border/40')}>
+      <div className={cn('flex flex-col flex-shrink-0', showEditorTabsRow && 'border-b border-edge-muted')}>
         {/* Row 1: Tabs */}
         {showEditorTabsRow ? (
         <div className="flex min-w-0 items-center px-3 py-1.5">
@@ -4712,7 +4753,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
         {/* Row 2: Docked editor toolbar. 40px with 24px buttons, the same band
             the context panel's file tree draws beside it, so the two line up. */}
         {selectedFile ? (
-          <div className="flex h-8 min-w-0 shrink-0 items-center border-t border-border/40 px-2">
+          <div className="flex h-8 min-w-0 shrink-0 items-center border-t border-edge-muted px-2">
             {renderFileToolbar({ layout: 'docked' })}
           </div>
         ) : null}
@@ -4721,7 +4762,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
 
       {!(mode === 'full' && isFullscreen) && wholeFileCommentPanel}
       {suggestExcalidrawExtension ? (
-        <div className="flex flex-shrink-0 items-center gap-2 border-b border-border/40 bg-[var(--surface-muted)] px-3 py-1.5 typography-ui text-muted-foreground">
+        <div className="flex flex-shrink-0 items-center gap-2 border-b border-edge-muted bg-[var(--surface-muted)] px-3 py-1.5 typography-ui text-muted-foreground">
           <Icon name="information" className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{t('filesView.excalidraw.installHint')}</span>
           <Button type="button" size="xs" variant="outline" onClick={openExcalidrawExtensionCard}>
@@ -4931,7 +4972,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
   const treePanel = treeEnabled ? (
     <section className={cn(
       "flex min-h-0 flex-col overflow-hidden",
-      isMobile ? "h-full w-full bg-background" : "h-full rounded-xl border border-border/60 bg-background/70"
+      isMobile ? "h-full w-full bg-background" : "h-full rounded-xl border border-edge bg-background/70"
     )}>
       <div className={cn("flex flex-col gap-2 py-2", isMobile ? "px-3" : "px-2")}>
         <div className="flex items-center gap-2">
@@ -5203,7 +5244,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full', visible = t
                {treePanel}
              </div>
            )}
-           <div className="flex-1 min-h-0 min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background">
+           <div className="flex-1 min-h-0 min-w-0 overflow-hidden rounded-xl border border-edge bg-background">
              {fileViewer}
            </div>
          </div>
