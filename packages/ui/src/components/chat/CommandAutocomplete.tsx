@@ -13,6 +13,7 @@ import { mergeCommandAutocompleteItems, rankCommandAutocompleteItems } from './c
 import { useGuestCommands } from '@/hooks/useGuestSurfaces';
 import { AutocompleteRowDetail } from './composer/ui/AutocompleteRowParts';
 import { useAutocompleteSelectionScroll } from './composer/ui/useAutocompleteSelectionScroll';
+import { useHeightMorph } from '@/lib/motion/useSizeMorph';
 
 // Skills are not here: they have their own `$` picker.
 type CommandSource = 'openchamber' | 'opencode' | 'extension';
@@ -76,6 +77,9 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
   const itemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
   const { listRef, onKeyboardNavigate } = useAutocompleteSelectionScroll(selectedIndex, itemRefs);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  // Narrowing as the user types, the box eases into its new height; its
+  // bottom edge stays on the composer (`bottom-full`), so it moves upward.
+  useHeightMorph(containerRef);
   const mobileMaxHeight = useMobileAutocompleteMaxHeight(containerRef, true);
   const ignoreClickRef = React.useRef(false);
   const pointerStartRef = React.useRef<{ x: number; y: number } | null>(null);
